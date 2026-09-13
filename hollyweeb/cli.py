@@ -41,11 +41,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--auto-interval", type=float, default=22.0, metavar="SECS",
                    help="seconds between auto character switches")
     p.add_argument("--static", action="store_true", help="never re-roll panes")
-    p.add_argument("--reroll", type=float, default=3.0, metavar="SECS",
-                   help="seconds between pane re-rolls, 0 = never (default 3)")
+    p.add_argument("--reroll", type=float, default=0.0, metavar="SECS",
+                   help="seconds between automatic pane re-rolls, 0 = never (default 0)")
     p.add_argument("--music-rotate", metavar="SECS|auto|off", default="auto",
-                   help="change the soundtrack on a timer: auto = every 4 re-rolls, "
-                        "a number of seconds, or off (default auto)")
+                   help="change the soundtrack on a timer: auto = every 4 re-rolls "
+                        "(or 16s when re-rolling is off), a number of seconds, or off "
+                        "(default auto)")
     p.add_argument("--no-glitch", action="store_true", help="disable glitch effects")
     p.add_argument("--no-boot", action="store_true", help="skip the boot animation")
     p.add_argument("-m", "--music", dest="music", action="store_true",

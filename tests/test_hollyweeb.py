@@ -710,7 +710,7 @@ class TestRerollAndMusicRotation(unittest.TestCase):
 
     def test_defaults(self):
         args = build_parser().parse_args([])
-        self.assertEqual(args.reroll, 3.0)
+        self.assertEqual(args.reroll, 0.0)          # no automatic re-rolls
         self.assertEqual(args.music_rotate, "auto")
         self.assertFalse(args.static)
 
@@ -722,7 +722,7 @@ class TestRerollAndMusicRotation(unittest.TestCase):
         self.assertEqual(_resolve_rotate("off", 3.0), 0.0)
         self.assertEqual(_resolve_rotate("2.5", 3.0), 2.5)
         self.assertEqual(_resolve_rotate(9, 3.0), 9.0)
-        self.assertEqual(_resolve_rotate("auto", 0.0), 0.0)     # reroll disabled
+        self.assertEqual(_resolve_rotate("auto", 0.0), 16.0)   # no re-rolls: still rotates
         self.assertEqual(_resolve_rotate("junk", 4.0), 16.0)
 
     def test_pane_ttl_hugs_the_reroll_interval(self):
@@ -733,6 +733,18 @@ class TestRerollAndMusicRotation(unittest.TestCase):
         self.assertGreater(max(ttls), 3.0)
         app.reroll = 0.0
         self.assertEqual(app._pane_ttl(), float("inf"))
+
+    def test_panes_do_not_reroll_by_default(self):
+        app = self._app()                    # default: no automatic re-rolls
+        self.assertEqual(app.reroll, 0.0)
+        before = [p.widget_name for p in app.panes]
+        for _ in range(600):                 # 20 simulated seconds
+            app.t += 1 / 30
+            app._update(1 / 30)
+        self.assertEqual(before, [p.widget_name for p in app.panes])
+        self.assertEqual(app.music_rotate, 16.0)   # ...but music still rotates
+        app._on_key("r")                     # manual re-roll still works
+        self.assertTrue(app.panes)
 
     def test_panes_reroll_over_time(self):
         app = self._app(reroll=0.4, panes=4)

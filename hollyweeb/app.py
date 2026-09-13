@@ -121,8 +121,8 @@ class App:
         self.music_override: str | None = getattr(args, "music_style", None)
         self.music_bars: list[float] = [0.0] * 4
 
-        # pane re-roll cadence (seconds; 0 or --static = never) and music rotation
-        self.reroll = max(0.0, float(getattr(args, "reroll", 3.0) or 0.0))
+        # pane re-roll cadence (seconds; 0 = never) and music rotation
+        self.reroll = max(0.0, float(getattr(args, "reroll", 0.0) or 0.0))
         self.music_rotate = _resolve_rotate(getattr(args, "music_rotate", "auto"), self.reroll)
         self.music_rotated_at = 0.0
 
@@ -924,7 +924,9 @@ def clip(text: str, w: int) -> str:
 def _resolve_rotate(value, reroll: float) -> float:
     """Turn `--music-rotate` into seconds: `auto` follows the re-roll cadence."""
     def auto() -> float:
-        return reroll * 4.0 if reroll > 0 else 0.0
+        # four re-rolls apart; panes don't re-roll by default, so fall back to a
+        # musical interval rather than switching the track off
+        return reroll * 4.0 if reroll > 0 else 16.0
 
     if value is None:
         return auto()

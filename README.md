@@ -176,9 +176,10 @@ hollyweeb --header-fx rainbow
 `glitch` · `clock` · `crypto` · `radar` · `netmap` · `banner` · `fires`
 
 Panes are picked to fit the space available (small terminals fall back to a pool
-of compact widgets), prefer not to repeat, and **re-roll every ~3 seconds**
-(staggered, so they don't all flip at once) — `--reroll SECS` changes the
-cadence, `--static` freezes the wall, and `r` re-rolls on demand.
+of compact widgets), prefer not to repeat, and **stay put** — panes do not
+reshuffle on their own. Press `r` to re-roll the whole wall on demand, or have
+them reshuffle on a timer with `--reroll SECS` (`--reroll 3` is full strobe,
+`--static` is the same as `--reroll 0`).
 
 ## Background music
 
@@ -218,14 +219,14 @@ drum grid, bass/arp/pad/lead voices, filter, drive, sidechain, stereo width):
 | `ambient` | beatless evolving pads |
 | `trance` | rolling bass + supersaw pads at 138 bpm |
 
-**The soundtrack rotates.** Every ~12 seconds (four re-rolls) hollyweeb moves to
-the next style, so the music keeps changing instead of looping one tune forever.
-The next track is synthesised ahead of time on a background thread, so the switch
-is instant once the cache is warm. Tune it with `--music-rotate`:
+**The soundtrack rotates.** Every ~16 seconds hollyweeb moves to the next style,
+so the music keeps changing instead of looping one tune forever. The next track
+is synthesised ahead of time on a background thread, so the switch is instant
+once the cache is warm. Tune it with `--music-rotate`:
 
 ```bash
 hollyweeb --music-rotate 30        # slower: half a minute per track
-hollyweeb --music-rotate 3         # chaotic: a new track every re-roll
+hollyweeb --music-rotate 3         # chaotic: a new track every 3 seconds
 hollyweeb --music-rotate off       # stay on the runner's own tune
 ```
 
@@ -272,7 +273,7 @@ and `HOLLYWEEB_MUSIC=0` silence everything, and every audio failure is non-fatal
     --auto              start in auto-cycle mode
     --auto-interval S   seconds between auto switches (default 22)
     --static            never re-roll panes
-    --reroll SECS       seconds between pane re-rolls, 0 = never (default 3)
+    --reroll SECS       seconds between automatic pane re-rolls, 0 = never (default 0)
     --music-rotate X    change soundtrack on a timer: auto = every 4 re-rolls,
                         a number of seconds, or off (default auto)
     --no-glitch         disable glitch effects
