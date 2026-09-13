@@ -46,43 +46,42 @@ split panes. It needs a Linux tty-multiplexer stack (`byobu`, `tmux`, `apg`,
 
 ## Install
 
-**Clone and run (no install at all):**
+Install once and you get a **`hollyweeb` command** — Python 3.9+ and any terminal,
+nothing else (no pip packages, no tmux, no ncurses).
 
 ```bash
-git clone https://github.com/m7pod/hollyweeb
-cd hollyweeb
-python run.py                  # Linux / macOS / Windows
+# straight from GitHub
+pip install "git+https://github.com/m7pod/hollyweeb.git"
+
+# or from a clone (add -e for an editable install while hacking on it)
+git clone https://github.com/m7pod/hollyweeb && cd hollyweeb
+pip install .
 ```
 
-**No install (run from an unpacked copy):**
+**Helper installers** (use `pipx`/`uv` when available, else `pip --user`):
 
 ```bash
-python run.py                  # Linux / macOS
-python run.py                  # Windows (PowerShell / cmd / Windows Terminal)
-```
-
-**Install (recommended):**
-
-```bash
-# Linux / macOS
-./install.sh                   # uses pipx/uv if available, else pip --user
+./install.sh                   # Linux / macOS
 ```
 
 ```powershell
-# Windows
-.\install.ps1
+.\install.ps1                   # Windows
 ```
 
-**Or plainly:**
+Then, from anywhere:
 
 ```bash
-pip install --user .                   # from a clone
-pip install "git+https://github.com/m7pod/hollyweeb.git"   # straight from GitHub
-python -m hollyweeb                   # works without installing too
+hollyweeb                      # boot animation, then character select
+hollyweeb -c neko              # straight to Neon Neko
 ```
 
-Requirements: **Python 3.9+** and any terminal. Nothing else — no pip packages,
-no tmux, no ncurses.
+**Prefer no install at all?** Run it straight from a checkout — same CLI, same
+behaviour, just without the `hollyweeb` command on your PATH:
+
+```bash
+python run.py                  # Linux / macOS / Windows
+python -m hollyweeb            # equivalent, from inside the checkout
+```
 
 ## Use
 
