@@ -94,10 +94,14 @@ hollyweeb                        # boot animation, then character select
 hollyweeb -c neko                # straight to Neon Neko
 hollyweeb -c ronin --panes 12 --fps 30
 hollyweeb -c idol --variant pastel
+hollyweeb --no-music             # ...and no soundtrack
 hollyweeb --auto                 # attract mode: cycles runners every 22s
-hollyweeb --list                 # show runners, palettes, widgets
+hollyweeb --list                 # show runners, palettes, soundtracks, widgets
 hollyweeb --duration 20          # exit after 20 seconds
 ```
+
+Music plays by default — every runner has its own tune — see
+[Background music](#background-music) for the ten styles and how to silence it.
 
 ### Keys
 
@@ -154,17 +158,24 @@ timer unless you pass `--static`.
 
 ## Background music
 
-`hollyweeb --music` adds a soundtrack that is **synthesised on the fly from
-wavetables** — still zero dependencies, still no bundled audio files. Each
-runner gets its own tune, so the music changes when you switch characters (and
-you hear each one while browsing the select screen):
+hollyweeb **plays a soundtrack by default** — one that is **synthesised on the
+fly from wavetables**, so it stays zero-dependency and ships no audio files.
+Each runner gets its own tune, so the music changes when you switch characters
+(and you hear each one while browsing the select screen):
 
 ```bash
-hollyweeb --music                       # Neon Neko, chiptune, 132 bpm
-hollyweeb --music -c corpo              # minimal techno at 128 bpm
-hollyweeb --music --music-style ambient # ignore the runner, keep it calm
-hollyweeb --music --music-bpm 90 --music-bars 8
-hollyweeb --music --music-volume 0.4
+hollyweeb                               # Neon Neko, chiptune, 132 bpm
+hollyweeb -c corpo                      # minimal techno at 128 bpm
+hollyweeb --no-music                    # ...or run it completely silent
+hollyweeb --music-style ambient         # ignore the runner, keep it calm
+hollyweeb --music-bpm 90 --music-bars 8
+hollyweeb --music-volume 0.4
+```
+
+Not a fan of surprise audio on every launch? Silence it for good:
+
+```bash
+export HOLLYWEEB_MUSIC=0                # Windows: setx HOLLYWEEB_MUSIC 0
 ```
 
 Ten styles, each a small parameter set for the same engine (chord progression,
@@ -200,14 +211,17 @@ track, tempo and a live equaliser: `♪ synthwave 104bpm ▄▆▅▃`.
 through (`.mp3`, `.ogg`, `.flac`, `.m4a`, `.opus`, `.wav`…):
 
 ```bash
-hollyweeb --music --music-file ~/Music/cyberpunk/
+hollyweeb --music-file ~/Music/cyberpunk/
 ```
 
-Rendering happens on a worker thread (~1–3 s per track) and the result is cached
-under `%TEMP%/hollyweeb-music` (or `$TMPDIR`), so the second run starts
-instantly; the cache self-prunes past 48 MB, and `hollyweeb --clear-music-cache`
-wipes it. Music is **off by default**, is never started by `--shot`/`--selftest`,
-and every audio failure is non-fatal — you just get a `♪ !` in the header.
+Rendering happens on a worker thread (~1–3 s per track, while the boot animation
+plays) and the result is cached under `%TEMP%/hollyweeb-music` (or `$TMPDIR`),
+so every run after the first starts instantly; the cache self-prunes past 48 MB,
+and `hollyweeb --clear-music-cache` wipes it.
+
+Audio never gets in the way: `--shot`/`--selftest` never start it, `--no-music`
+and `HOLLYWEEB_MUSIC=0` silence everything, and every audio failure is non-fatal
+— you just get a `♪ !` in the header and the wall of fake work keeps scrolling.
 
 ## CLI reference
 
@@ -224,8 +238,8 @@ and every audio failure is non-fatal — you just get a `♪ !` in the header.
     --static            never re-roll panes
     --no-glitch         disable glitch effects
     --no-boot           skip the boot animation
-    --music             play the runner's soundtrack (off by default)
-    --no-music          force music off
+    --music             play the runner's soundtrack (default)
+    --no-music          run silently
     --music-style NAME  synthwave|chiptune|koto|darkwave|citypop|taiko|lofi|techno|ambient|trance
     --music-volume 0..1 music level (default 0.7)
     --music-bpm N       override the tempo
@@ -241,6 +255,10 @@ and every audio failure is non-fatal — you just get a `♪ !` in the header.
     --size WxH          virtual terminal size for --shot
     --screen main|select|boot   which screen --shot renders
 ```
+
+Environment variables: `HOLLYWEEB_MUSIC=0` silences every invocation including
+plain `hollyweeb`, `NO_COLOR=1` forces monochrome, and
+`HOLLYWEEB_COLOR=truecolor|256|16|none` overrides colour detection.
 
 ## Cross-platform notes
 

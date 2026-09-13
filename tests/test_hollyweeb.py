@@ -8,6 +8,7 @@ import argparse
 import os
 import random
 import sys
+import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -26,12 +27,69 @@ from hollyweeb.term import char_width, decode_keys, narrow_only  # noqa: E402
 
 
 def make_args(**kw) -> argparse.Namespace:
-    args = build_parser().parse_args(["--no-boot"])
+    args = build_parser().parse_args(["--no-boot", "--no-music"])
     # never touch the sound card or the synth cache during tests
     args.music_dry = True
     for k, v in kw.items():
         setattr(args, k, v)
     return args
+
+
+class TestMusicDefaults(unittest.TestCase):
+    """Music ships on by default, with a clean way out."""
+
+    def tearDown(self):
+        pulse.reset()
+
+    def test_music_is_on_by_default(self):
+        self.assertTrue(build_parser().parse_args([]).music)
+        self.assertTrue(build_parser().parse_args(["-m"]).music)
+        self.assertTrue(build_parser().parse_args(["--music"]).music)
+        self.assertFalse(build_parser().parse_args(["--no-music"]).music)
+
+    def test_env_var_can_silence_everything(self):
+        from hollyweeb.cli import apply_music_env
+
+        old = os.environ.get("HOLLYWEEB_MUSIC")
+        try:
+            os.environ["HOLLYWEEB_MUSIC"] = "0"
+            self.assertFalse(apply_music_env(build_parser().parse_args([]), []).music)
+            os.environ["HOLLYWEEB_MUSIC"] = "off"
+            self.assertFalse(apply_music_env(build_parser().parse_args([]), []).music)
+            os.environ["HOLLYWEEB_MUSIC"] = "1"
+            self.assertTrue(apply_music_env(build_parser().parse_args([]), []).music)
+            os.environ["HOLLYWEEB_MUSIC"] = "0"
+            # an explicit flag always beats the environment
+            self.assertTrue(apply_music_env(build_parser().parse_args([]), ["--music"]).music)
+            self.assertTrue(apply_music_env(build_parser().parse_args([]), ["-m"]).music)
+        finally:
+            if old is None:
+                os.environ.pop("HOLLYWEEB_MUSIC", None)
+            else:
+                os.environ["HOLLYWEEB_MUSIC"] = old
+
+    def test_default_app_has_music_ready(self):
+        from hollyweeb.app import App
+
+        args = build_parser().parse_args(["--no-boot", "--size", "70x20"])
+        args.music_dry = True  # audible in real life, silent in tests
+        self.assertTrue(args.music)
+        app = App(args)
+        try:
+            self.assertTrue(app.music.enabled)
+            self.assertEqual(app.music.style_key, CHARACTERS[0].music)
+            app.music.enable()  # App.run() does this once the terminal is up
+            for _ in range(60):
+                app._update(1 / 30)
+                if app.music.playing:
+                    break
+                time.sleep(0.01)
+            self.assertTrue(app.music.playing)
+            self.assertTrue(pulse.active)
+            app._on_key("m")
+            self.assertFalse(app.music.enabled)
+        finally:
+            app.music.stop()
 
 
 class TestColor(unittest.TestCase):
