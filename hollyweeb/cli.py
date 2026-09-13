@@ -6,7 +6,7 @@ import argparse
 import random
 import sys
 
-from . import __version__, art, widgets
+from . import __version__, art, music, widgets
 from .canvas import Canvas, View
 from .color import MODE_TRUECOLOR, detect_mode
 from .palettes import CHARACTERS, VARIANTS
@@ -40,6 +40,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--static", action="store_true", help="never re-roll panes")
     p.add_argument("--no-glitch", action="store_true", help="disable glitch effects")
     p.add_argument("--no-boot", action="store_true", help="skip the boot animation")
+    p.add_argument("-m", "--music", dest="music", action="store_true",
+                   help="play the runner's soundtrack in the background")
+    p.add_argument("--no-music", dest="music", action="store_false", help="force music off (default)")
+    p.add_argument("--music-style", metavar="NAME", help="override the runner's tune: " + ", ".join(music.STYLE_KEYS))
+    p.add_argument("--music-volume", type=float, default=0.7, metavar="0..1", help="music volume (default 0.7)")
+    p.add_argument("--music-bpm", type=float, default=None, metavar="N", help="override the tempo")
+    p.add_argument("--music-bars", type=int, default=None, metavar="N", help="loop length in bars")
+    p.add_argument("--music-file", metavar="PATH",
+                   help="play your own audio instead: a file, or a directory to shuffle")
+    p.add_argument("--music-cache-dir", metavar="DIR", help="where rendered tracks are cached")
+    p.add_argument("--clear-music-cache", action="store_true", help="delete cached tracks and exit")
+    p.set_defaults(music=False)
     p.add_argument("--no-alt-screen", action="store_true",
                    help="draw in the normal screen buffer (keeps scrollback)")
     p.add_argument("--list", action="store_true", help="list runners, palettes and widgets, then exit")
@@ -81,12 +93,18 @@ def cmd_list() -> int:
         print(f"       {swatch}\x1b[0m  widgets: {', '.join(c.widgets[:6])}…")
     print("\nCOUTURE VARIANTS")
     print("  " + ", ".join(VARIANTS))
+    print("\nSOUNDTRACKS  (hollyweeb --music)")
+    for key, name, bpm in music.style_names():
+        print(f"  {key:<12} {name:<18} {int(bpm):>3} bpm")
+    print("\n  runner            tune")
+    for c in CHARACTERS:
+        print(f"  {c.name:<16}  {c.music}")
     print("\nWIDGETS")
     labels = widgets.widget_labels()
     for name in sorted(labels):
         print(f"  {name:<16} {labels[name]}")
     print("\nKEYS: q quit · 1-0 runner · t couture · +/- panes · r reroll · space pause · "
-          "a auto · g glitch · s shot · ? help")
+          "m music · M track · , . volume · ? help")
     return 0
 
 
@@ -117,6 +135,24 @@ def cmd_selftest(frames: int) -> int:
                 if name not in widgets.REGISTRY:
                     failures += 1
                     print(f"FAIL {c.key}: widget '{name}' is not registered")
+            if c.music not in music.STYLES:
+                failures += 1
+                print(f"FAIL {c.key}: unknown soundtrack '{c.music}'")
+
+    # soundtrack: render every style tiny, just to prove the synth runs
+    import time
+
+    t0 = time.perf_counter()
+    for key, style in music.STYLES.items():
+        try:
+            pcm = music.render_pcm(style, sr=4000, seed=3)
+            if not pcm or max(abs(min(pcm)), abs(max(pcm))) == 0:
+                raise ValueError("silent output")
+        except Exception as exc:  # noqa: BLE001
+            failures += 1
+            print(f"FAIL music '{key}': {type(exc).__name__}: {exc}")
+    print(f"selftest: music: {len(music.STYLES)} styles rendered in {time.perf_counter() - t0:.2f}s "
+          f"(backend: {music.find_backend() or 'none'})")
     print(f"selftest: {len(widgets.WIDGET_CLASSES)} widgets x {len(VARIANTS)} variants x {len(sizes)} sizes"
           f" -> {'OK' if not failures else str(failures) + ' FAILURES'}")
     return 1 if failures else 0
@@ -131,6 +167,7 @@ def cmd_shot(args) -> int:
     args_no_tty.character = args.character or "neko"
     args_no_tty.no_boot = args.screen != "boot"
     args_no_tty.size = f"{size[0]}x{size[1]}"
+    args_no_tty.music = False  # never make noise during a headless render
     app = App(args_no_tty)
     app.w, app.h = size
     app.canvas = Canvas(size[0], size[1])
@@ -163,6 +200,10 @@ def cmd_shot(args) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.clear_music_cache:
+        n = music.clear_cache(args.music_cache_dir)
+        print(f"removed {n} cached track(s)")
+        return 0
     if args.list:
         return cmd_list()
     if args.selftest:

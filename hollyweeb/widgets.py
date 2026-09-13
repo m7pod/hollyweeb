@@ -16,7 +16,7 @@ from __future__ import annotations
 import math
 import random
 
-from . import art
+from . import art, pulse
 from .canvas import BOLD, DIM, View
 from .color import RGB, darken, lerp_ramp, lighten, mix
 from .term import narrow_only
@@ -587,6 +587,8 @@ class Spectrum(Widget):
             env = math.exp(-((x - 0.25) ** 2) * 5) * 0.8 + math.exp(-((x - 0.7) ** 2) * 7) * 0.7
             target = abs(math.sin(self.t * (1.2 + x * 5.5) + self.phase + x * 9)) * env
             target += self.rng.uniform(0, 0.18) * (1 - x)
+            if pulse.active:
+                target += pulse.level * 0.30 * (1.0 - x)
             target = min(1.0, target + 0.05)
             self.vel[i] += (target - self.bars[i]) * 12 * dt
             self.vel[i] *= 0.86
@@ -662,6 +664,8 @@ class Vu(Widget):
         for i in range(2):
             base = 0.55 + 0.4 * math.sin(self.t * (1.1 + i * 0.4) + i * 2)
             base = abs(base) + self.rng.uniform(0, 0.22)
+            if pulse.active:
+                base += pulse.level * 0.32
             target = min(1.0, base)
             self.levels[i] += (target - self.levels[i]) * min(1.0, 9 * dt)
             self.peak[i] = max(self.peak[i] - dt * 0.4, self.levels[i])
@@ -995,6 +999,11 @@ class Cat(Widget):
 
     def update(self, dt, t):
         super().update(dt, t)
+        if pulse.active and pulse.bpm > 0.0:
+            # lock the drum pad to the soundtrack
+            self.beat = pulse.bpm / 60.0
+            phase = (self.tap * self.beat) % 1.0
+            self.tap += ((pulse.beat - phase) % 1.0) / self.beat
         self.tap += dt
         self.blink -= dt
         self.meow = max(0.0, self.meow - dt)
@@ -1066,6 +1075,8 @@ class Heartbeat(Widget):
 
     def update(self, dt, t):
         super().update(dt, t)
+        if pulse.active and pulse.bpm > 0.0:
+            self.bpm = int(max(58, min(168, pulse.bpm)))
         step = self.bpm / 60.0 * dt
         self.phase = (self.phase + step) % 1.0
         val = 0.0

@@ -15,7 +15,7 @@ import math
 import random
 import time
 
-from . import art, widgets
+from . import art, music, pulse, widgets
 from .canvas import BOLD, DIM, Canvas, View
 from .color import Colorizer, darken, detect_mode, lerp_ramp, lighten, mix
 from .layout import Rect, auto_pane_count, choose_cards, grid_rects
@@ -102,6 +102,21 @@ class App:
         self.ticker_done_at = 0.0
         self.last_glitch = 0.0
 
+        # soundtrack
+        self.music = music.MusicPlayer(
+            enabled=bool(getattr(args, "music", False)),
+            style=getattr(args, "music_style", None) or CHARACTERS[self.char_index].music,
+            volume=getattr(args, "music_volume", 0.7),
+            seed=args.seed or 0,
+            path=getattr(args, "music_file", None),
+            bpm=getattr(args, "music_bpm", None),
+            bars=getattr(args, "music_bars", None),
+            cache_dir=getattr(args, "music_cache_dir", None),
+            dry_run=bool(getattr(args, "music_dry", False)),
+        )
+        self.music_override: str | None = getattr(args, "music_style", None)
+        self.music_bars: list[float] = [0.0] * 4
+
         self.boot_t = 0.0
         self.boot_done = False
         self.screen = "main" if (args.character or args.no_boot) else "boot"
@@ -128,6 +143,41 @@ class App:
         self.ticker_index = 0
         self.ticker_text = ""
         self.typing = 0.0
+        self._sync_music()
+
+    # -- soundtrack --------------------------------------------------------
+    def _music_style_for(self, index: int) -> str:
+        if self.music_override:
+            return self.music_override
+        return CHARACTERS[max(0, min(len(CHARACTERS) - 1, index))].music
+
+    def _sync_music(self) -> None:
+        self.music.set_style(self._music_style_for(self.char_index))
+
+    def _update_pulse(self) -> None:
+        """Feed the shared beat clock so widgets can move in time."""
+        if not self.music.playing:
+            if pulse.active:
+                pulse.reset()
+                self.music_bars = [0.0] * 4
+            return
+        beat_phase, bar_phase = self.music.phase()
+        level = max(0.0, 1.0 - beat_phase * 2.2)
+        for i in range(4):
+            target = abs(math.sin((beat_phase + i * 0.21) * math.pi)) * (0.45 + 0.55 * level)
+            self.music_bars[i] += (target - self.music_bars[i]) * 0.4
+        pulse.set_clock(True, self.music.style.bpm, beat_phase, bar_phase, level)
+
+    def _music_indicator(self) -> str:
+        if not self.music.enabled:
+            return ""
+        state = self.music.state
+        if state == "error":
+            return "♪ !"
+        if state != "playing":
+            return "♪ …"
+        bars = "".join("▁▂▃▄▅▆▇█"[min(7, int(b * 8))] for b in self.music_bars)
+        return f"♪ {self.music.style_key} {int(self.music.style.bpm)}bpm {bars}"
 
     def _fix_palette_for_mode(self, pal: Palette) -> None:
         """Monochrome terminals get no painted backgrounds (they'd look nasty)."""
@@ -213,6 +263,9 @@ class App:
     # ------------------------------------------------------------------
     def run(self) -> int:
         self.term.start()
+        if self.music.enabled:
+            self._sync_music()
+            self.music.enable()
         start = time.perf_counter()
         last = start
         # force a resize check
@@ -223,6 +276,7 @@ class App:
         except BrokenPipeError:
             pass
         finally:
+            self.music.stop()
             self.term.stop()
         return 0
 
@@ -329,10 +383,26 @@ class App:
             self._note(f"auto-cycle {'on' if self.auto else 'off'}")
         elif key == "s":
             self._screenshot()
+        elif key == "f":
+            if len(self.panes) > 1:
+                self.pane_count_override = 1
+            else:
+                self.pane_count_override = 0
+            self._build_panes(self.pane_count_override or auto_pane_count(self.w, self.h))
+            self._note("focus mode" if self.pane_count_override else "grid mode")
         elif key == "m":
-            self.pane_count_override = 1
-            self._build_panes(1)
-            self._note("solo mode")
+            on = self.music.toggle()
+            self._note(self.music.status_text() if on else "music off")
+        elif key == "M":
+            keys = music.STYLE_KEYS
+            idx = (keys.index(self.music.style_key) + 1) % len(keys)
+            self.music_override = keys[idx]
+            self.music.set_style(keys[idx], force=True)
+            self._note(f"track: {self.music.style.name}")
+        elif key in (",", "."):
+            step = -0.1 if key == "," else 0.1
+            vol = self.music.set_volume(round(self.music.volume + step, 2))
+            self._note(f"volume {int(vol * 100)}%")
         elif key.isdigit():
             self._select_by_digit(key)
         elif key == "enter":
@@ -343,6 +413,7 @@ class App:
     def _on_key_select(self, key: str) -> None:
         n = len(CHARACTERS)
         cols = self._select_cols()
+        prev = self.sel_index
         if key in ("q", "esc", "ctrl-c", "ctrl-d"):
             self.running = False
         elif key in ("left", "h"):
@@ -365,6 +436,13 @@ class App:
         elif key in ("t", "T"):
             self.variant_index = (self.variant_index + 1) % len(VARIANTS)
             self._note(f"couture: {VARIANTS[self.variant_index]}")
+        elif key == "m":
+            on = self.music.toggle()
+            self._note(self.music.status_text() if on else "music off")
+        elif key in (",", "."):
+            step = -0.1 if key == "," else 0.1
+            vol = self.music.set_volume(round(self.music.volume + step, 2))
+            self._note(f"volume {int(vol * 100)}%")
         elif key == "r":
             self.sel_index = self.rng.randrange(n)
             self.char_index = self.sel_index
@@ -372,6 +450,9 @@ class App:
             self.screen = "main"
         elif key.isdigit():
             self._select_by_digit(key, start=True)
+        if self.sel_index != prev:
+            # audition that runner's tune while browsing the roster
+            self.music.set_style(self._music_style_for(self.sel_index))
 
     def _select_by_digit(self, key: str, start: bool = False) -> None:
         idx = (int(key) - 1) % 10 if key != "0" else 9
@@ -412,6 +493,8 @@ class App:
     # update
     # ------------------------------------------------------------------
     def _update(self, dt: float) -> None:
+        self.music.tick()
+        self._update_pulse()
         if self.screen == "boot":
             self.boot_t += dt
             if self.boot_t >= 3.4:
@@ -567,6 +650,11 @@ class App:
             v.text(2, self.header_h - 3, clip(tick, self.w - 3), pal.fg)
             stats = f"{len(self.panes)} panes  {self.fps}fps  {self.mode}  {int(self.t // 60):02d}:{int(self.t % 60):02d}"
             v.text(max(0, self.w - len(stats) - 2), self.header_h - 2, stats, pal.dim)
+            tune = self._music_indicator()
+            if tune:
+                mx = self.w - len(stats) - 4 - len(tune)
+                if mx > 1:
+                    v.text(mx, self.header_h - 2, tune, pal.cycle(2))
             if self.paused:
                 v.text(1, self.header_h - 2, "PAUSED", pal.warn, None, BOLD)
         else:
@@ -577,6 +665,8 @@ class App:
             if self.header_h > 2:
                 v.text(1, 1, clip(tick, self.w - 2), pal.dim)
             info = f"{len(self.panes)}p {self.fps}fps"
+            if self.music.enabled:
+                info = "♪ " + info
             v.text(max(0, self.w - len(info) - 1), 0, info, pal.dim)
             if self.paused:
                 v.text(max(0, self.w - len(info) - 7), 0, "PAUSE", pal.warn, None, BOLD)
@@ -620,7 +710,7 @@ class App:
         left = self.message or f"{self.character.name}  //  {VARIANTS[self.variant_index]}"
         col = pal.hot if self.message else pal.cycle(1)
         v.text(1, 0, clip(left, self.w - 2), col, None, BOLD)
-        keys = "q quit · 1-0 runner · enter select · t couture · +/- panes · r reroll · space pause · a auto · g glitch · s shot · ? help"
+        keys = "q quit · 1-0 runner · enter select · t couture · +/- panes · r reroll · m music · space pause · ? help"
         if self.w > len(keys) + len(left) + 6:
             v.text(self.w - len(keys) - 2, 0, keys, pal.dim)
 
@@ -765,7 +855,10 @@ class App:
             ("a", "auto-cycle runners"),
             ("g", "toggle glitch fx"),
             ("s", "save a plain-text screenshot"),
-            ("m", "solo mode (one pane)"),
+            ("m", "music on / off"),
+            ("M", "next music style"),
+            (", / .", "volume down / up"),
+            ("f", "focus mode (one pane)"),
             ("? / h", "this help"),
         ]
         w = min(self.w - 4, max(46, max(len(a) + len(b) for a, b in lines) + 10))

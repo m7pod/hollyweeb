@@ -124,6 +124,8 @@ class Character:
     ticker: list[str] = field(default_factory=list)
     # how twitchy the panes are (0..1) -> how often they reshuffle / glitch
     chaos: float = 0.5
+    # key of the soundtrack this runner plays (see hollyweeb.music.STYLES)
+    music: str = "synthwave"
 
     @property
     def art(self) -> list[str]:
@@ -154,6 +156,7 @@ CHARACTERS: list[Character] = [
             "neko.exe is running",
         ],
         chaos=0.35,
+        music="chiptune",
     ),
     Character(
         key="geisha",
@@ -174,6 +177,7 @@ CHARACTERS: list[Character] = [
             "おちゃをどうぞ // have a nice exploit",
         ],
         chaos=0.55,
+        music="koto",
     ),
     Character(
         key="ronin",
@@ -194,6 +198,7 @@ CHARACTERS: list[Character] = [
             "honor is a zero-day",
         ],
         chaos=0.6,
+        music="darkwave",
     ),
     Character(
         key="succubus",
@@ -213,6 +218,7 @@ CHARACTERS: list[Character] = [
             "you may call me root",
         ],
         chaos=0.7,
+        music="synthwave",
     ),
     Character(
         key="idol",
@@ -232,6 +238,7 @@ CHARACTERS: list[Character] = [
             "encore loop detected",
         ],
         chaos=0.3,
+        music="citypop",
     ),
     Character(
         key="kitsune",
@@ -251,6 +258,7 @@ CHARACTERS: list[Character] = [
             "foxfire on the wire",
         ],
         chaos=0.5,
+        music="taiko",
     ),
     Character(
         key="ramen",
@@ -270,6 +278,7 @@ CHARACTERS: list[Character] = [
             "delivery drone en route",
         ],
         chaos=0.25,
+        music="lofi",
     ),
     Character(
         key="corpo",
@@ -290,6 +299,7 @@ CHARACTERS: list[Character] = [
             "black ice, green numbers",
         ],
         chaos=0.45,
+        music="techno",
     ),
     Character(
         key="android",
@@ -309,6 +319,7 @@ CHARACTERS: list[Character] = [
             "ascending to /dev/tty1",
         ],
         chaos=0.35,
+        music="ambient",
     ),
     Character(
         key="panda",
@@ -328,6 +339,7 @@ CHARACTERS: list[Character] = [
             "panda.exe stopped working (adorably)",
         ],
         chaos=0.3,
+        music="trance",
     ),
 ]
 

@@ -12,7 +12,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from hollyweeb import art, widgets  # noqa: E402
+from hollyweeb import art, music, pulse, widgets  # noqa: E402
 from hollyweeb.canvas import Canvas, View  # noqa: E402
 from hollyweeb.cli import build_parser  # noqa: E402
 from hollyweeb.color import (  # noqa: E402
@@ -27,6 +27,8 @@ from hollyweeb.term import char_width, decode_keys, narrow_only  # noqa: E402
 
 def make_args(**kw) -> argparse.Namespace:
     args = build_parser().parse_args(["--no-boot"])
+    # never touch the sound card or the synth cache during tests
+    args.music_dry = True
     for k, v in kw.items():
         setattr(args, k, v)
     return args
@@ -280,6 +282,247 @@ class TestApp(unittest.TestCase):
         self.assertEqual(parse_size("80x24"), (80, 24))
         self.assertIsNone(parse_size("nope"))
         self.assertIsNone(parse_size(""))
+
+
+class TestMusic(unittest.TestCase):
+    """The synth is deterministic and cheap enough to unit-test at low rates."""
+
+    LOW = dict(sr=4000)
+
+    def tearDown(self):
+        pulse.reset()
+
+    @staticmethod
+    def _short(style, bars=1):
+        return music.Style(**{**style.__dict__, "bars": bars})
+
+    def test_render_shape_and_levels(self):
+        style = self._short(music.STYLES["synthwave"], bars=2)
+        pcm = music.render_pcm(style, **self.LOW)
+        beat = 60.0 / style.bpm
+        expected = 2 * int(round(beat * 4 * self.LOW["sr"])) * 2  # *2 channels
+        self.assertEqual(len(pcm), expected)
+        self.assertLessEqual(max(pcm), 32767)
+        self.assertGreaterEqual(min(pcm), -32768)
+        self.assertGreater(max(pcm) - min(pcm), 1000, "track is silent")
+
+    def test_all_styles_render(self):
+        for key, style in music.STYLES.items():
+            pcm = music.render_pcm(self._short(style), **self.LOW)
+            self.assertGreater(len(pcm), 0, key)
+            self.assertGreater(max(pcm) - min(pcm), 500, f"{key} silent")
+
+    def test_deterministic_per_seed(self):
+        style = self._short(music.STYLES["trance"])
+        a = music.render_pcm(style, seed=11, **self.LOW)
+        b = music.render_pcm(style, seed=11, **self.LOW)
+        c = music.render_pcm(style, seed=12, **self.LOW)
+        self.assertEqual(a.tobytes(), b.tobytes())
+        self.assertNotEqual(a.tobytes(), c.tobytes())
+
+    def test_loop_seam_has_no_click(self):
+        """The loop point must not be a worse jump than the track's own transients."""
+        for key in ("techno", "lofi", "synthwave"):
+            style = self._short(music.STYLES[key])
+            pcm = music.render_pcm(style, sr=8000)
+            mono = [pcm[i] for i in range(0, len(pcm), 2)]
+            deltas = [abs(mono[i + 1] - mono[i]) for i in range(len(mono) - 1)]
+            seam = abs(mono[0] - mono[-1])
+            self.assertLessEqual(seam, max(deltas), f"{key}: click at the loop point ({seam})")
+        # a beatless style has no transients at all, so the seam must be tiny:
+        # note tails near the end are folded into the head instead of truncated
+        style = self._short(music.STYLES["ambient"])
+        pcm = music.render_pcm(style, sr=8000)
+        mono = [pcm[i] for i in range(0, len(pcm), 2)]
+        self.assertLess(abs(mono[0] - mono[-1]), 1500, "pad is cut off at the loop point")
+
+    def test_wav_roundtrip(self):
+        import tempfile
+        import wave
+
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "sub", "track.wav")
+            style = self._short(music.STYLES["lofi"])
+            music.render_to_wav(style, path, seed=1, **self.LOW)
+            self.assertTrue(os.path.exists(path))
+            with wave.open(path) as fh:
+                self.assertEqual(fh.getnchannels(), 2)
+                self.assertEqual(fh.getsampwidth(), 2)
+                self.assertEqual(fh.getframerate(), self.LOW["sr"])
+                self.assertGreater(fh.getnframes(), 0)
+
+    def test_styles_and_runner_tunes(self):
+        self.assertGreaterEqual(len(music.STYLES), 8)
+        for c in CHARACTERS:
+            self.assertIn(c.music, music.STYLES, f"{c.key} -> {c.music}")
+        self.assertTrue(all(len(row) == 3 for row in music.style_names()))
+        self.assertEqual(set(music.STYLE_KEYS), set(music.STYLES))
+
+    def test_scale_degree_maths(self):
+        minor = music.SCALES["minor"]
+        self.assertEqual(music.degree(minor, 0), 0)
+        self.assertEqual(music.degree(minor, 7), 12)
+        self.assertEqual(music.degree(minor, -1), -2)
+        self.assertAlmostEqual(music.midi_to_freq(69), 440.0)
+        self.assertAlmostEqual(music.midi_to_freq(57), 220.0)
+
+    def test_player_command_lines(self):
+        for backend in ("mpv", "ffplay", "afplay", "paplay", "aplay", "play", "cvlc"):
+            cmd = music._build_command(backend, "/tmp/x.wav", 0.5, True)
+            self.assertIn("/tmp/x.wav", cmd)
+            self.assertIsInstance(cmd[0], str)
+
+    def test_cache_path_tracks_settings(self):
+        p = music.MusicPlayer(style="synthwave", seed=1, dry_run=True)
+        self.assertEqual(p._cache_path(), p._cache_path())
+        first = p._cache_path()
+        p.set_style("ambient")
+        self.assertNotEqual(first, p._cache_path())
+        p2 = music.MusicPlayer(style="synthwave", seed=2, dry_run=True)
+        self.assertNotEqual(first, p2._cache_path())
+
+    def test_player_toggle_dry_run(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            p = music.MusicPlayer(style="chiptune", dry_run=True, cache_dir=d)
+            self.assertFalse(p.enabled)
+            self.assertEqual(p.state, "off")
+            self.assertIn("off", p.status_text())
+            self.assertTrue(p.toggle())
+            for _ in range(50):
+                if p.playing:
+                    break
+                time.sleep(0.02)
+            self.assertEqual(p.state, "playing")
+            beat, bar = p.phase()
+            self.assertTrue(0.0 <= beat < 1.0)
+            self.assertTrue(0.0 <= bar < 1.0)
+            self.assertIn("chiptune", (p.style_key, p.style.name.lower()))
+            p.set_style("taiko")
+            self.assertEqual(p.style_key, "taiko")
+            self.assertEqual(p.set_volume(5.0), 1.0)
+            self.assertEqual(p.set_volume(-2.0), 0.0)
+            p.tick()
+            self.assertFalse(p.toggle())
+            self.assertEqual(p.state, "off")
+            p.stop()
+
+    def test_player_reports_missing_backend(self):
+        original = music.find_backend
+        try:
+            music.find_backend = lambda: None  # type: ignore[assignment]
+            p = music.MusicPlayer(style="techno", dry_run=False)
+            self.assertIsNone(p.backend)
+            p.enable()
+            for _ in range(50):
+                if p.state == "error":
+                    break
+                time.sleep(0.02)
+            self.assertEqual(p.state, "error")
+            self.assertIn("player", p.detail)
+            p.stop()
+        finally:
+            music.find_backend = original  # type: ignore[assignment]
+
+    def test_cache_helpers(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            music.render_to_wav(self._short(music.STYLES["koto"]), os.path.join(d, "a.wav"), **self.LOW)
+            self.assertGreater(music.cache_size(d), 0)
+            self.assertEqual(music.clear_cache(d), 1)
+            self.assertEqual(music.cache_size(d), 0)
+
+    def test_loop_seconds(self):
+        style = music.STYLES["techno"]
+        self.assertAlmostEqual(music.loop_seconds(style), style.bars * 4 * 60 / style.bpm)
+        self.assertAlmostEqual(music.loop_seconds(style, 8), 8 * 4 * 60 / style.bpm)
+
+
+class TestMusicIntegration(unittest.TestCase):
+    """App-level wiring: keys, pulse clock, and the headless-music guarantee."""
+
+    def tearDown(self):
+        pulse.reset()
+
+    def _app(self, **kw):
+        from hollyweeb.app import App
+
+        args = make_args(size="96x28", character="neko", seed=5, fps=30, panes=4, **kw)
+        return App(args)
+
+    def test_music_keys(self):
+        app = self._app()
+        app.screen = "main"
+        app._start_dashboard()
+        app._on_key("m")
+        self.assertTrue(app.music.enabled)
+        for _ in range(60):
+            app._update(1 / 30)
+            if app.music.playing:
+                break
+            time.sleep(0.01)
+        self.assertTrue(app.music.playing)
+        self.assertTrue(pulse.active)
+        self.assertAlmostEqual(pulse.bpm, app.music.style.bpm)
+        self.assertIn("♪", app._music_indicator())
+        before = app.music.style_key
+        app._on_key("M")
+        self.assertNotEqual(before, app.music.style_key)
+        vol = app.music.volume
+        app._on_key(",")
+        self.assertLess(app.music.volume, vol)
+        app._on_key(".")
+        app._on_key("f")
+        self.assertEqual(len(app.panes), 1)
+        app._draw()
+        app._on_key("m")
+        self.assertFalse(app.music.enabled)
+        app._update(1 / 30)
+        self.assertFalse(pulse.active)
+        app.music.stop()
+
+    def test_runner_switches_the_tune(self):
+        app = self._app()
+        app.screen = "main"
+        app._start_dashboard()
+        app.music.enable()
+        for idx, ch in enumerate(CHARACTERS[:4]):
+            app.char_index = idx
+            app._start_dashboard()
+            self.assertEqual(app.music.style_key, ch.music, ch.key)
+        app.music.stop()
+
+    def test_music_file_override_blocks_runner_switch(self):
+        app = self._app(music_style="techno")
+        app.screen = "main"
+        app._start_dashboard()
+        app.char_index = 3
+        app._start_dashboard()
+        self.assertEqual(app.music.style_key, "techno")
+
+    def test_select_screen_auditions(self):
+        app = self._app()
+        app.screen = "select"
+        app.music.enable()
+        app.sel_index = 5
+        app._on_key_select("right")
+        self.assertEqual(app.music.style_key, CHARACTERS[app.sel_index].music)
+        app.music.stop()
+
+    def test_headless_shot_is_silent(self):
+        from hollyweeb import cli
+
+        args = build_parser().parse_args(["--shot", os.path.join(os.environ.get("TEMP", "/tmp"), "hw_test.txt"),
+                                          "--frames", "2", "--size", "60x18", "--music"])
+        try:
+            cli.cmd_shot(args)
+        finally:
+            try:
+                os.remove(args.shot)
+            except OSError:
+                pass
 
 
 if __name__ == "__main__":

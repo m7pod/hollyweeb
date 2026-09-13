@@ -9,7 +9,8 @@
 A **fashion-forward, cyberpunk, aggressively cute** clone of
 [`hollywood`](https://github.com/dustinkirkland/hollywood) that runs in a *single*
 terminal window on **Linux, macOS and Windows** — no tmux, no byobu, no root, no
-dependencies.
+dependencies — with its own **procedurally synthesised soundtrack** and a cast of
+runners to choose from.
 
 ```text
  █   █  ███  █     █     █   █ █   █ █████ █████ ████        \     /   SYNTH SUCCUBUS
@@ -42,6 +43,9 @@ split panes. It needs a Linux tty-multiplexer stack (`byobu`, `tmux`, `apg`,
   you can cycle live,
 * detects and degrades truecolor → 256 → 16 → plain, so it looks good in
   Windows Terminal, iTerm2, kitty, foot, xterm, screen, tmux and serial consoles,
+* **synthesises its own soundtrack** — ten procedurally generated electronic
+  styles (synthwave, chiptune, techno, city pop, ambient…), one per runner, in
+  pure Python, and the visuals pulse in time with the beat,
 * stays under ~30 fps of pure-Python simulation using a diffed cell canvas.
 
 ## Install
@@ -105,10 +109,13 @@ hollyweeb --duration 20          # exit after 20 seconds
 | `+` / `-` | more / fewer panes |
 | `r` | re-roll every pane |
 | `space` / `p` | pause the simulation |
+| `m` | music on / off |
+| `M` | next music style |
+| `,` / `.` | volume down / up |
 | `a` | auto-cycle runners |
 | `g` | toggle glitch fx |
 | `s` | save a plain-text screenshot |
-| `m` | solo mode (one big pane) |
+| `f` | focus mode (one big pane) |
 | `enter` (in main) | back to character select |
 | `?` / `h` | help overlay |
 
@@ -117,21 +124,22 @@ variants, `r` is random, digits jump straight in, `q` quits.
 
 ## The cast
 
-| # | Runner | Vibe |
-| - | ------ | ---- |
-| 1 | **NEON NEKO** | catgirl sysadmin — nine lives, zero uptime |
-| 2 | **GLITCH GEISHA** | tea ceremony at 240 baud, poison in the packet |
-| 3 | **CHROME RONIN** | no master, no firewall, only the blade |
-| 4 | **SYNTH SUCCUBUS** | your bandwidth belongs to me now, darling |
-| 5 | **VAPOR IDOL** | debut stage: mainframe, encore: forever |
-| 6 | **DATA KITSUNE** | nine tails, nine proxies, one truth |
-| 7 | **RAMEN RUNNER** | hot broth, cold code, 3 a.m. delivery |
-| 8 | **CORPO SUIT** | quarterly earnings up, ethics deprecated |
-| 9 | **ANDROID ANGEL** | halo firmware 7.0, bless this socket |
-| 0 | **PANDA PROTOCOL** | bamboo firewall, bite-sized exploits |
+| # | Runner | Vibe | Tune |
+| - | ------ | ---- | ---- |
+| 1 | **NEON NEKO** | catgirl sysadmin — nine lives, zero uptime | `chiptune` |
+| 2 | **GLITCH GEISHA** | tea ceremony at 240 baud, poison in the packet | `koto` |
+| 3 | **CHROME RONIN** | no master, no firewall, only the blade | `darkwave` |
+| 4 | **SYNTH SUCCUBUS** | your bandwidth belongs to me now, darling | `synthwave` |
+| 5 | **VAPOR IDOL** | debut stage: mainframe, encore: forever | `citypop` |
+| 6 | **DATA KITSUNE** | nine tails, nine proxies, one truth | `taiko` |
+| 7 | **RAMEN RUNNER** | hot broth, cold code, 3 a.m. delivery | `lofi` |
+| 8 | **CORPO SUIT** | quarterly earnings up, ethics deprecated | `techno` |
+| 9 | **ANDROID ANGEL** | halo firmware 7.0, bless this socket | `ambient` |
+| 0 | **PANDA PROTOCOL** | bamboo firewall, bite-sized exploits | `trance` |
 
 Each runner has a weighted widget pool, a glyph set for the rain panes, a
-border style and a chaos level that drives how fast panes re-roll and glitch.
+border style, a chaos level that drives how fast panes re-roll and glitch, and
+its own soundtrack (see below).
 
 ## Widgets (27)
 
@@ -143,6 +151,63 @@ border style and a chaos level that drives how fast panes re-roll and glitch.
 Panes are picked to fit the space available (small terminals fall back to a pool
 of compact widgets), prefer not to repeat, and re-roll on a character-dependent
 timer unless you pass `--static`.
+
+## Background music
+
+`hollyweeb --music` adds a soundtrack that is **synthesised on the fly from
+wavetables** — still zero dependencies, still no bundled audio files. Each
+runner gets its own tune, so the music changes when you switch characters (and
+you hear each one while browsing the select screen):
+
+```bash
+hollyweeb --music                       # Neon Neko, chiptune, 132 bpm
+hollyweeb --music -c corpo              # minimal techno at 128 bpm
+hollyweeb --music --music-style ambient # ignore the runner, keep it calm
+hollyweeb --music --music-bpm 90 --music-bars 8
+hollyweeb --music --music-volume 0.4
+```
+
+Ten styles, each a small parameter set for the same engine (chord progression,
+drum grid, bass/arp/pad/lead voices, filter, drive, sidechain, stereo width):
+
+| Style | Feel |
+| ----- | ---- |
+| `synthwave` | neon arpeggios, gated pads, 4-on-the-floor |
+| `chiptune` | 8-bit square leads, octave-bouncing bass |
+| `koto` | hirajoshi pentatonic plucks, taiko-ish drums |
+| `darkwave` | driving minor bass, cold pads |
+| `citypop` | maj7 chords, bright organs, night-drive bass |
+| `taiko` | percussive, pentatonic, ritualistic |
+| `lofi` | swung, warm, deliberately dull filter |
+| `techno` | minimal, rolling acid bass, offbeat open hats |
+| `ambient` | beatless evolving pads |
+| `trance` | rolling bass + supersaw pads at 138 bpm |
+
+**The visuals listen too.** The synth publishes a beat clock, so the bongo cat
+taps on the beat, VU meters and the spectrum kick on the kick drum, and the
+`vitals` pane takes the track's BPM as its heart rate. The header shows the
+track, tempo and a live equaliser: `♪ synthwave 104bpm ▄▆▅▃`.
+
+**Playback** uses whatever your OS already has — nothing extra to install:
+
+| Platform | Player |
+| -------- | ------ |
+| Windows | `winsound` (stdlib, gapless `SND_LOOP`) |
+| macOS | `afplay` (built in) |
+| Linux | first of `mpv`, `ffplay`, `paplay`, `aplay`, `sox play`, `vlc` |
+
+**Your own music works too** — point it at a file, or a directory to shuffle
+through (`.mp3`, `.ogg`, `.flac`, `.m4a`, `.opus`, `.wav`…):
+
+```bash
+hollyweeb --music --music-file ~/Music/cyberpunk/
+```
+
+Rendering happens on a worker thread (~1–3 s per track) and the result is cached
+under `%TEMP%/hollyweeb-music` (or `$TMPDIR`), so the second run starts
+instantly; the cache self-prunes past 48 MB, and `hollyweeb --clear-music-cache`
+wipes it. Music is **off by default**, is never started by `--shot`/`--selftest`,
+and every audio failure is non-fatal — you just get a `♪ !` in the header.
 
 ## CLI reference
 
@@ -159,6 +224,15 @@ timer unless you pass `--static`.
     --static            never re-roll panes
     --no-glitch         disable glitch effects
     --no-boot           skip the boot animation
+    --music             play the runner's soundtrack (off by default)
+    --no-music          force music off
+    --music-style NAME  synthwave|chiptune|koto|darkwave|citypop|taiko|lofi|techno|ambient|trance
+    --music-volume 0..1 music level (default 0.7)
+    --music-bpm N       override the tempo
+    --music-bars N      loop length in bars
+    --music-file PATH   play your own audio: a file, or a directory to shuffle
+    --music-cache-dir D where rendered tracks are cached
+    --clear-music-cache delete cached tracks and exit
     --no-alt-screen     draw in the normal buffer (keeps scrollback)
     --list              list runners + widgets, then exit
     --selftest          render every widget/variant headlessly, then exit
@@ -177,13 +251,18 @@ timer unless you pass `--static`.
 | **Linux** | Any xterm-compatible terminal; also inside `tmux`/`screen` (it nests a full-screen app, so no `hollywood`-style pane multiplexing is required). `SIGWINCH` triggers re-layout. |
 | **Anything ancient** | `--color 16`, `TERM=dumb`, or `NO_COLOR=1` all degrade gracefully. |
 
+Audio needs no extra packages: `winsound` on Windows, `afplay` on macOS, and on
+Linux whichever of `mpv`/`ffplay`/`paplay`/`aplay`/`sox`/`vlc` is installed. If
+none is, the TUI keeps running silently and tells you in the header.
+
 Because hollyweeb paints its own panes, it also works over SSH, in a
 `docker run -it`, in GitHub Actions logs (`--color 256`), or piped to a file.
 
 ## Headless / CI
 
 ```bash
-python -m hollyweeb --selftest                       # every widget × variant × size
+python -m hollyweeb --selftest                       # every widget x variant x size, plus the synth
+python -m hollyweeb --list                           # runners, variants, soundtracks, widgets
 python -m hollyweeb --shot banner.txt --size 140x42 --frames 120 -c geisha
 python -m hollyweeb --shot banner.ansi --size 140x42 --frames 120 -c neko
 python -m unittest discover -s tests -v
@@ -215,10 +294,28 @@ class MyPane(Widget):
 your widget names in its `widgets=[...]` pool. Both are picked up by the
 select screen, `--list` and the test-suite automatically.
 
+Add a tune in `hollyweeb/music.py` — it's just another `_st(...)` entry in
+`STYLES` (tempo, scale, chord progression, which voices play and how loud), and
+any runner can point at it with `music="yourkey"`. Widgets that want to move
+with the beat can read the shared clock:
+
+```python
+from . import pulse
+
+if pulse.active:            # music is playing
+    boost = pulse.level     # 1.0 on the kick, decaying
+    phase = pulse.beat      # 0..1 within the current beat
+    tempo = pulse.bpm
+```
+
 ## How it works
 
 * `canvas.py` — flat `(char, fg, bg, style)` cell grid + clipped sub-`View`s and
   a row-level diff that emits cursor moves only for changed runs.
+* `music.py` — wavetable synth (kick/snare/hat/bass/arp/pad/lead + sidechain,
+  filter, saturation, stereo delay), loop-safe rendering with wrapped note tails,
+  an on-disk cache and a cross-platform player.
+* `pulse.py` — the shared beat clock that lets widgets move with the music.
 * `term.py` — raw mode, alt screen, resize detection, non-blocking key decoding
   (termios+select on POSIX, msvcrt on Windows), plus narrow-glyph filtering so
   the grid never desynchronises in terminals that render ambiguous-width
