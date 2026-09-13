@@ -599,5 +599,96 @@ class TestMusicIntegration(unittest.TestCase):
                 pass
 
 
+class TestHeaderFx(unittest.TestCase):
+    """The wordmark uses a mixed-colour effect, not one flat theme gradient."""
+
+    def tearDown(self):
+        pulse.reset()
+
+    @staticmethod
+    def _render(mode, t=1.3, w=60):
+        pal = CHARACTERS[0].palette
+        stops = [pal.cycle(0), pal.cycle(1), pal.cycle(2), pal.cycle(3)]
+        cv = Canvas(w, 6)
+        width = art.draw_banner_fx(View(cv, 0, 0, w, 6), 0, 0, "HOLLYWEEB", stops, t=t,
+                                   mode=mode, ink="#", hot=pal.hot, cool=pal.cool)
+        return cv, width
+
+    @staticmethod
+    def _hue_spread(cv):
+        from hollyweeb.color import to_hsv
+
+        hues = [to_hsv(c)[0] for c in cv.fg if c is not None]
+        return (max(hues) - min(hues)) if len(hues) > 1 else 0.0
+
+    def test_every_mode_renders(self):
+        for mode in art.HEADER_FX:
+            cv, width = self._render(mode)
+            self.assertGreater(width, 0, mode)
+            self.assertGreater(sum(ch != " " for ch in cv.ch), 20, mode)
+
+    def test_mixed_modes_beat_the_flat_theme(self):
+        flat, _ = self._render("theme")
+        holo, _ = self._render("holo")
+        rainbow, _ = self._render("rainbow")
+        self.assertGreater(self._hue_spread(holo), self._hue_spread(flat) + 0.3)
+        self.assertGreater(self._hue_spread(rainbow), 0.8)
+
+    def test_effect_is_animated(self):
+        a, _ = self._render("holo", t=0.0)
+        b, _ = self._render("holo", t=0.7)
+        self.assertNotEqual(list(a.fg), list(b.fg))
+
+    def test_glitch_adds_chromatic_ghosts(self):
+        base, _ = self._render("theme")
+        glitch, _ = self._render("glitch")
+        self.assertGreater(sum(c != " " for c in glitch.ch), sum(c != " " for c in base.ch))
+
+    def test_banner_stops_match_the_effect(self):
+        pal = CHARACTERS[0].palette
+        stops = [pal.cycle(0), pal.cycle(1)]
+        ramp = art.banner_stops("rainbow", stops, 0.5, pal.hot, pal.cool, n=8)
+        self.assertEqual(len(ramp), 8)
+        self.assertTrue(all(len(c) == 3 for c in ramp))
+
+    def test_app_default_is_holo_and_H_cycles(self):
+        from hollyweeb.app import App
+
+        app = App(make_args(size="90x26", character="neko"))
+        app.music.stop()
+        self.assertEqual(app.header_fx, "holo")
+        seen = {app.header_fx}
+        for _ in range(len(art.HEADER_FX) - 1):
+            app._on_key("H")
+            seen.add(app.header_fx)
+        self.assertEqual(seen, set(art.HEADER_FX))
+        app._on_key("H")
+        self.assertEqual(app.header_fx, "holo")  # wraps around
+
+    def test_app_honours_the_cli_flag(self):
+        from hollyweeb.app import App
+
+        args = build_parser().parse_args(["--no-music", "--header-fx", "vapor"])
+        app = App(args)
+        app.music.stop()
+        self.assertEqual(app.header_fx, "vapor")
+        self.assertIn("--header-fx", build_parser().format_help())
+        with self.assertRaises(SystemExit):
+            build_parser().parse_args(["--header-fx", "nope"])
+
+    def test_headless_render_uses_the_effect(self):
+        from hollyweeb.app import App
+
+        for mode in ("holo", "rainbow", "glitch"):
+            app = App(make_args(size="100x30", character="neko", header_fx=mode))
+            app.music.stop()
+            app.screen = "main"
+            app._start_dashboard()
+            app.t += 1.0
+            app._draw()
+            header = "".join(app.canvas.ch[: app.w * app.header_h])
+            self.assertIn("█", header, mode)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

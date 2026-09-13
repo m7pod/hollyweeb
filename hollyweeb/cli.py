@@ -29,6 +29,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-c", "--character", metavar="NAME", help="runner to start with (see --list)")
     p.add_argument("-p", "--panes", type=int, default=0, metavar="N", help="number of panes (0 = auto)")
     p.add_argument("--variant", metavar="NAME", help="couture variant: " + ", ".join(VARIANTS))
+    p.add_argument("--header-fx", metavar="NAME", choices=art.HEADER_FX,
+                   help="wordmark effect: " + ", ".join(art.HEADER_FX) + " (default holo)")
     p.add_argument("-f", "--fps", type=int, default=24, help="target frames per second (default 24)")
     p.add_argument("--color", default="auto", choices=["auto", "truecolor", "256", "16", "none"],
                    help="force a colour mode (default: auto-detect)")
@@ -94,6 +96,8 @@ def cmd_list() -> int:
         print(f"       {swatch}\x1b[0m  widgets: {', '.join(c.widgets[:6])}…")
     print("\nCOUTURE VARIANTS")
     print("  " + ", ".join(VARIANTS))
+    print("\nHEADER EFFECTS  (--header-fx, or press H in the app)")
+    print("  " + ", ".join(art.HEADER_FX))
     print("\nSOUNDTRACKS  (on by default; --no-music to silence)")
     for key, name, bpm in music.style_names():
         print(f"  {key:<12} {name:<18} {int(bpm):>3} bpm")

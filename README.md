@@ -46,6 +46,8 @@ split panes. It needs a Linux tty-multiplexer stack (`byobu`, `tmux`, `apg`,
 * **synthesises its own soundtrack** — ten procedurally generated electronic
   styles (synthwave, chiptune, techno, city pop, ambient…), one per runner, in
   pure Python, and the visuals pulse in time with the beat,
+* has an **animated mixed-colour wordmark** — the header runs the full hue wheel
+  across its letters with a travelling gloss, instead of one flat theme gradient,
 * stays under ~30 fps of pure-Python simulation using a diffed cell canvas.
 
 ## Install
@@ -110,6 +112,7 @@ Music plays by default — every runner has its own tune — see
 | `q` / `esc` | quit (during boot: skip) |
 | `1`…`9`, `0` | switch runner instantly |
 | `t` / `T` | cycle couture variant |
+| `H` | cycle header effect |
 | `+` / `-` | more / fewer panes |
 | `r` | re-roll every pane |
 | `space` / `p` | pause the simulation |
@@ -144,6 +147,26 @@ variants, `r` is random, digits jump straight in, `q` quits.
 Each runner has a weighted widget pool, a glyph set for the rain panes, a
 border style, a chaos level that drives how fast panes re-roll and glitch, and
 its own soundtrack (see below).
+
+### Header effects
+
+The big `HOLLYWEEB` wordmark is not painted with one palette gradient — it runs
+an animated colour effect across its letters, and so does the rule under the
+header. Cycle them live with <kbd>H</kbd> or pick one up front:
+
+```bash
+hollyweeb --header-fx rainbow
+```
+
+| Effect | Look |
+| ------ | ---- |
+| `holo` *(default)* | each letter takes its own hue off the theme, mixed with a complementary tone and a travelling white gloss |
+| `rainbow` | the full spectrum sweeping along the wordmark |
+| `prism` | refracted hues with a hot/cool chromatic ghost either side of the glyphs |
+| `confetti` | every cell picks a random pastel from a mixed pool, sparkling at 5 Hz |
+| `vapor` | pink → cyan → lilac → cream pastel drift |
+| `glitch` | datamoshed hues plus RGB-split edges |
+| `theme` | the original single-palette gradient |
 
 ## Widgets (27)
 
@@ -229,6 +252,7 @@ and `HOLLYWEEB_MUSIC=0` silence everything, and every audio failure is non-fatal
 -c, --character NAME    runner to start with (see --list)
 -p, --panes N           number of panes (0 = auto)
     --variant NAME      signature|neon|pastel|ice|sunset|acid|vhs|mono
+    --header-fx NAME    holo|rainbow|prism|confetti|vapor|glitch|theme (default holo)
 -f, --fps N             target frames per second (default 24)
     --color MODE        auto|truecolor|256|16|none
     --seed N            reproducible chaos

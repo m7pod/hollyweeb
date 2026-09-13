@@ -102,6 +102,10 @@ class App:
         self.ticker_done_at = 0.0
         self.last_glitch = 0.0
 
+        # header wordmark effect: mixed colours by default, not one flat theme
+        fx = getattr(args, "header_fx", None) or "holo"
+        self.header_fx = fx if fx in art.HEADER_FX else "holo"
+
         # soundtrack
         self.music = music.MusicPlayer(
             enabled=bool(getattr(args, "music", False)),
@@ -377,6 +381,10 @@ class App:
         elif key == "g":
             self.glitch_fx = not self.glitch_fx
             self._note(f"glitch fx {'on' if self.glitch_fx else 'off'}")
+        elif key == "H":
+            idx = (art.HEADER_FX.index(self.header_fx) + 1) % len(art.HEADER_FX)
+            self.header_fx = art.HEADER_FX[idx]
+            self._note(f"header fx: {self.header_fx}")
         elif key == "a":
             self.auto = not self.auto
             self.auto_at = self.t
@@ -581,7 +589,8 @@ class App:
         bw = art.banner_width("HOLLYWEEB")
         bx = max(0, (self.w - bw) // 2)
         by = max(1, self.h // 4)
-        art.draw_banner(v, bx, by, "HOLLYWEEB", [pal.cycle(0), pal.cycle(1), pal.cycle(2)], ink="█")
+        art.draw_banner_fx(v, bx, by, "HOLLYWEEB", [pal.cycle(0), pal.cycle(1), pal.cycle(2)],
+                           t=self.t, mode=self.header_fx, ink="█", hot=pal.hot, cool=pal.cool)
         sub = "a fashion-forward cyberpunk cuteness terminal multiplexer"
         v.text(max(0, (self.w - len(sub)) // 2), by + 6, sub, pal.dim)
         # boot log
@@ -626,13 +635,17 @@ class App:
     def _draw_header(self, pal: Palette) -> None:
         v = self._view(0, 0, self.w, self.header_h)
         ch = self.character
-        # gradient rule at the very bottom of the header
-        v.hline(0, self.header_h - 1, self.w, "─", darken(pal.cycle(1), 0.35))
+        # animated mixed-colour rule under the header
+        v.hgrad(0, self.header_h - 1, self.w,
+                art.banner_stops(self.header_fx,
+                                 [pal.cycle(0), pal.cycle(1), pal.cycle(2), pal.cycle(3)],
+                                 self.t, pal.hot, pal.cool, n=14), "─")
         if self.header_h >= 6:
             bw = art.banner_width("HOLLYWEEB")
-            art.draw_banner(v, 1, 0, "HOLLYWEEB",
-                            [pal.cycle(0), pal.cycle(1), pal.cycle(2), pal.cycle(3)],
-                            ink="█")
+            art.draw_banner_fx(v, 1, 0, "HOLLYWEEB",
+                               [pal.cycle(0), pal.cycle(1), pal.cycle(2), pal.cycle(3)],
+                               t=self.t, mode=self.header_fx, ink="█",
+                               hot=pal.hot, cool=pal.cool)
             # mascot + identity on the right when there is room, compact otherwise
             mw = max(0, len(ch.art[0]))
             if self.w >= bw + mw + 34:
@@ -710,7 +723,7 @@ class App:
         left = self.message or f"{self.character.name}  //  {VARIANTS[self.variant_index]}"
         col = pal.hot if self.message else pal.cycle(1)
         v.text(1, 0, clip(left, self.w - 2), col, None, BOLD)
-        keys = "q quit · 1-0 runner · enter select · t couture · +/- panes · r reroll · m music · space pause · ? help"
+        keys = "q quit · 1-0 runner · enter select · t couture · H header · +/- panes · r reroll · m music · ? help"
         if self.w > len(keys) + len(left) + 6:
             v.text(self.w - len(keys) - 2, 0, keys, pal.dim)
 
@@ -759,8 +772,10 @@ class App:
         top = 6 if self.big_header else 1
         if top == 6:
             bw = art.banner_width("HOLLYWEEB")
-            art.draw_banner(v, max(0, (self.w - bw) // 2), 0, "HOLLYWEEB",
-                            [pal.cycle(0), pal.cycle(1), pal.cycle(2)], ink="█")
+            art.draw_banner_fx(v, max(0, (self.w - bw) // 2), 0, "HOLLYWEEB",
+                               [pal.cycle(0), pal.cycle(1), pal.cycle(2)],
+                               t=self.t, mode=self.header_fx, ink="█",
+                               hot=pal.hot, cool=pal.cool)
             title = "S E L E C T   Y O U R   R U N N E R"
             v.text(max(0, (self.w - len(title)) // 2), 5, title, pal.cycle(3))
         else:
@@ -849,6 +864,7 @@ class App:
             ("1 - 9 , 0", "switch runner instantly"),
             ("enter", "back to character select"),
             ("t / T", "cycle couture variant"),
+            ("H", "cycle header effect (holo/rainbow/prism/vapor/glitch/theme)"),
             ("+ / -", "more / fewer panes"),
             ("r", "re-roll every pane"),
             ("space / p", "pause the simulation"),
