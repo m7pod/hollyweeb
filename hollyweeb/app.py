@@ -121,6 +121,11 @@ class App:
         self.music_override: str | None = getattr(args, "music_style", None)
         self.music_bars: list[float] = [0.0] * 4
 
+        # pane re-roll cadence (seconds; 0 or --static = never) and music rotation
+        self.reroll = max(0.0, float(getattr(args, "reroll", 3.0) or 0.0))
+        self.music_rotate = _resolve_rotate(getattr(args, "music_rotate", "auto"), self.reroll)
+        self.music_rotated_at = 0.0
+
         self.boot_t = 0.0
         self.boot_done = False
         self.screen = "main" if (args.character or args.no_boot) else "boot"
@@ -214,6 +219,13 @@ class App:
         name = choices[self.rng.randrange(len(choices))]
         return widgets.make(name, self.rng, self.palette), name
 
+    def _pane_ttl(self) -> float:
+        """Seconds until this pane re-rolls, staggered so they don't all flip at once."""
+        if self.reroll <= 0.0:
+            return float("inf")
+        spread = 0.15 + 0.35 * self.character.chaos
+        return self.reroll * self.rng.uniform(1.0 - spread, 1.0 + spread)
+
     def _build_panes(self, count: int) -> None:
         count = max(1, min(24, count))
         area = Rect(0, self.header_h, self.w, max(1, self.h - self.header_h - self.footer_h))
@@ -226,9 +238,8 @@ class App:
             avoid = old[i].widget_name if i in old else None
             widget, name = self._widget_for(rect, avoid, used)
             used.add(name)
-            ttl = self.rng.uniform(18, 46) * (1.25 - 0.8 * self.character.chaos)
             color = pal.cycle(i * 2 + 1)
-            panes.append(Pane(rect, widget, name, color, ttl, i))
+            panes.append(Pane(rect, widget, name, color, self._pane_ttl(), i))
         self.panes = panes
 
     def _reroll_panes(self) -> None:
@@ -240,7 +251,7 @@ class App:
             used.add(name)
             p.widget, p.widget_name = widget, name
             p.age = 0.0
-            p.ttl = self.rng.uniform(18, 46) * (1.25 - 0.8 * self.character.chaos)
+            p.ttl = self._pane_ttl()
             p.color = pal.cycle(p.index * 2 + 1)
 
     # ------------------------------------------------------------------
@@ -519,7 +530,7 @@ class App:
                 widget, name = self._widget_for(p.rect, p.widget_name)
                 p.widget, p.widget_name = widget, name
                 p.age = 0.0
-                p.ttl = self.rng.uniform(18, 46) * (1.25 - 0.8 * self.character.chaos)
+                p.ttl = self._pane_ttl()
                 p.color = self.palette.cycle(p.index * 2 + 1)
         # ticker typing
         ticker = self.character.ticker
@@ -537,6 +548,16 @@ class App:
             self.char_index = (self.char_index + 1) % len(CHARACTERS)
             self.sel_index = self.char_index
             self._start_dashboard()
+        # rotate the soundtrack on its own cadence
+        if (self.music_rotate > 0 and self.screen == "main" and self.music.enabled
+                and self.music.playing and self.t > 1.0):
+            if self.music_rotated_at <= 0.0:
+                self.music_rotated_at = self.t          # start the clock on first play
+            elif self.t - self.music_rotated_at > self.music_rotate:
+                self.music_rotated_at = self.t
+                self.music.rotate()
+                if not self.message:
+                    self._note(f"track: {self.music.style.name}", 2.2)
         if self.message and self.t > self.message_until:
             self.message = ""
 
@@ -898,6 +919,26 @@ def clip(text: str, w: int) -> str:
     if w <= 0:
         return ""
     return text if len(text) <= w else text[: max(0, w - 1)] + "…"
+
+
+def _resolve_rotate(value, reroll: float) -> float:
+    """Turn `--music-rotate` into seconds: `auto` follows the re-roll cadence."""
+    def auto() -> float:
+        return reroll * 4.0 if reroll > 0 else 0.0
+
+    if value is None:
+        return auto()
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in ("auto", ""):
+            return auto()
+        if v in ("off", "never", "none", "no"):
+            return 0.0
+        try:
+            return max(0.0, float(v))
+        except ValueError:
+            return auto()
+    return max(0.0, float(value))
 
 
 def parse_size(text: str) -> tuple[int, int] | None:

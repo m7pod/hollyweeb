@@ -690,5 +690,136 @@ class TestHeaderFx(unittest.TestCase):
             self.assertIn("█", header, mode)
 
 
+class TestRerollAndMusicRotation(unittest.TestCase):
+    """Panes re-roll every few seconds, and the soundtrack moves with them."""
+
+    def tearDown(self):
+        pulse.reset()
+
+    def _app(self, **kw):
+        from hollyweeb.app import App
+
+        kw.setdefault("size", "120x34")
+        kw.setdefault("character", "neko")
+        kw.setdefault("panes", 4)
+        args = make_args(**kw)
+        app = App(args)
+        app.screen = "main"
+        app._start_dashboard()
+        return app
+
+    def test_defaults(self):
+        args = build_parser().parse_args([])
+        self.assertEqual(args.reroll, 3.0)
+        self.assertEqual(args.music_rotate, "auto")
+        self.assertFalse(args.static)
+
+    def test_resolve_rotate(self):
+        from hollyweeb.app import _resolve_rotate
+
+        self.assertEqual(_resolve_rotate("auto", 3.0), 12.0)   # every 4 re-rolls
+        self.assertEqual(_resolve_rotate(None, 3.0), 12.0)
+        self.assertEqual(_resolve_rotate("off", 3.0), 0.0)
+        self.assertEqual(_resolve_rotate("2.5", 3.0), 2.5)
+        self.assertEqual(_resolve_rotate(9, 3.0), 9.0)
+        self.assertEqual(_resolve_rotate("auto", 0.0), 0.0)     # reroll disabled
+        self.assertEqual(_resolve_rotate("junk", 4.0), 16.0)
+
+    def test_pane_ttl_hugs_the_reroll_interval(self):
+        app = self._app(reroll=3.0)
+        ttls = [app._pane_ttl() for _ in range(80)]
+        self.assertTrue(all(1.5 <= t <= 4.5 for t in ttls), (min(ttls), max(ttls)))
+        self.assertLess(min(ttls), 3.0)      # staggered, not synchronised
+        self.assertGreater(max(ttls), 3.0)
+        app.reroll = 0.0
+        self.assertEqual(app._pane_ttl(), float("inf"))
+
+    def test_panes_reroll_over_time(self):
+        app = self._app(reroll=0.4, panes=4)
+        prev = [p.widget_name for p in app.panes]
+        changes = 0
+        for _ in range(150):                 # 5 simulated seconds
+            app.t += 1 / 30
+            app._update(1 / 30)
+            now = [p.widget_name for p in app.panes]
+            changes += sum(1 for a, b in zip(prev, now) if a != b)
+            prev = now
+        self.assertGreater(changes, 3, "panes never re-rolled")
+
+    def test_static_flag_stops_rerolls(self):
+        app = self._app(reroll=0.2, static=True)
+        before = [p.widget_name for p in app.panes]
+        for _ in range(120):
+            app.t += 1 / 30
+            app._update(1 / 30)
+        self.assertEqual(before, [p.widget_name for p in app.panes])
+
+    def test_player_rotate_visits_every_style_once(self):
+        player = music.MusicPlayer(style="synthwave", dry_run=True)
+        seen = [player.rotate() for _ in range(len(music.STYLE_KEYS))]
+        self.assertEqual(len(set(seen)), len(music.STYLE_KEYS))
+        self.assertEqual(sorted(seen), sorted(music.STYLE_KEYS))
+        self.assertEqual(player.rotate(), seen[0])          # wraps around
+
+    def test_rotate_is_a_noop_for_user_playlists(self):
+        player = music.MusicPlayer(style="techno", dry_run=True, path="/nowhere/x.mp3")
+        self.assertEqual(player.rotate(), "techno")
+
+    def test_app_rotates_the_track_on_a_timer(self):
+        app = self._app(music=True, music_rotate="0.05")
+        app.music.enable()
+        for _ in range(20):
+            app._update(1 / 30)
+            if app.music.playing:
+                break
+            time.sleep(0.01)
+        first = app.music.style_key
+        for _ in range(400):                 # ~13 simulated seconds
+            app.t += 1 / 30
+            app._update(1 / 30)
+        self.assertNotEqual(first, app.music.style_key)
+        app.music.stop()
+
+    def test_rotation_off_keeps_one_track(self):
+        app = self._app(music=True, music_rotate="off")
+        self.assertEqual(app.music_rotate, 0.0)
+        app.music.enable()
+        first = app.music.style_key
+        for _ in range(400):
+            app.t += 1 / 30
+            app._update(1 / 30)
+        self.assertEqual(first, app.music.style_key)
+        app.music.stop()
+
+    def test_warm_fills_the_cache(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            player = music.MusicPlayer(style="techno", dry_run=False, sr=4000, bars=1,
+                                       cache_dir=d, volume=0.5)
+            target = player._cache_path_for(player._style_for("lofi"))
+            self.assertFalse(os.path.exists(target))
+            self.assertTrue(player.warm("lofi"))
+            for _ in range(200):
+                if os.path.exists(target):
+                    break
+                time.sleep(0.05)
+            self.assertTrue(os.path.exists(target), "warm() never wrote the cache")
+            # a second call is a no-op while the file is there
+            self.assertFalse(player.warm("lofi"))
+
+    def test_warm_is_skipped_when_dry_run(self):
+        player = music.MusicPlayer(dry_run=True)
+        self.assertFalse(player.warm("ambient"))
+        self.assertFalse(player.warm("not-a-style"))
+
+    def test_cli_flags_exist(self):
+        args = build_parser().parse_args(["--reroll", "7", "--music-rotate", "9"])
+        self.assertEqual(args.reroll, 7.0)
+        self.assertEqual(args.music_rotate, "9")
+        self.assertIn("--reroll", build_parser().format_help())
+        self.assertIn("--music-rotate", build_parser().format_help())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -605,6 +605,7 @@ class MusicPlayer:
         self._started_at = 0.0
         self._loop_len = 0.0
         self._volume_dirty = 0.0
+        self._prefetching = False
         self._backend = find_backend() if not dry_run else "dry"
 
     # -- state -------------------------------------------------------------
@@ -614,7 +615,10 @@ class MusicPlayer:
 
     @property
     def style(self) -> Style:
-        s = STYLES[self._style_key]
+        return self._style_for(self._style_key)
+
+    def _style_for(self, key: str) -> Style:
+        s = STYLES[key]
         if self.bpm_override or self.bars_override:
             s = Style(**{**s.__dict__,
                          "bpm": self.bpm_override or s.bpm,
@@ -672,6 +676,52 @@ class MusicPlayer:
         if self.enabled:
             self._restart()
 
+    def rotation(self) -> list[str]:
+        """The style order used by `rotate()`, starting after the current one."""
+        if not STYLE_KEYS:
+            return []
+        i = STYLE_KEYS.index(self._style_key) if self._style_key in STYLE_KEYS else -1
+        return STYLE_KEYS[i + 1:] + STYLE_KEYS[: i + 1]
+
+    def rotate(self) -> str:
+        """Advance to the next soundtrack. Returns the new style key."""
+        if self.user_path:
+            return self._style_key           # playing the user's own files
+        order = self.rotation()
+        if not order:
+            return self._style_key
+        nxt = order[0]
+        self.set_style(nxt, force=True)
+        return nxt
+
+    def warm(self, key: str) -> bool:
+        """Render `key` into the cache on a background thread (never blocks).
+
+        Called ahead of a rotation so the style switch is instant instead of a
+        two-second synthesis pause.
+        """
+        if self.dry_run or self.user_path or key not in STYLES:
+            return False
+        path = self._cache_path_for(self._style_for(key))
+        if os.path.exists(path) or self._prefetching:
+            return False
+        self._prefetching = True
+
+        def work() -> None:
+            try:
+                os.makedirs(self.cache_dir, exist_ok=True)
+                prune_cache(cache_dir=self.cache_dir)
+                if not os.path.exists(path):
+                    render_to_wav(self._style_for(key), path, sr=self.sr, seed=self.seed,
+                                  volume=self.volume)
+            except Exception:
+                pass
+            finally:
+                self._prefetching = False
+
+        threading.Thread(target=work, name="hollyweeb-music-warm", daemon=True).start()
+        return True
+
     def set_volume(self, volume: float) -> float:
         """Set the level; the re-render happens once the level settles (see tick())."""
         self.volume = max(0.0, min(1.0, volume))
@@ -680,11 +730,17 @@ class MusicPlayer:
         return self.volume
 
     def tick(self) -> None:
-        """Called from the app loop: applies a debounced volume change."""
+        """Called from the app loop: applies a debounced volume change and warms
+        the next rotation into the cache while the current track plays."""
         if self._volume_dirty and time.monotonic() - self._volume_dirty > 0.6:
             self._volume_dirty = 0.0
             if self.enabled:
                 self._restart()
+        if (self.enabled and self.playing and not self._prefetching and not self.user_path
+                and not self.dry_run and time.monotonic() - self._started_at > 2.0):
+            order = self.rotation()
+            if order:
+                self.warm(order[0])
 
     # -- internals ---------------------------------------------------------
     def _teardown(self) -> None:
@@ -722,7 +778,9 @@ class MusicPlayer:
         self._thread.start()
 
     def _cache_path(self) -> str:
-        style = self.style
+        return self._cache_path_for(self.style)
+
+    def _cache_path_for(self, style: Style) -> str:
         name = (f"hollyweeb-v{MUSIC_VERSION}-{style.key}-{style.bpm:g}bpm-{style.bars}bar-"
                 f"{self.sr}-{self.seed}-{int(self.volume * 100)}.wav")
         return os.path.join(self.cache_dir, name)
