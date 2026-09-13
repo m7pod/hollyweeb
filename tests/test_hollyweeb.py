@@ -511,6 +511,22 @@ class TestMusicIntegration(unittest.TestCase):
         self.assertEqual(app.music.style_key, CHARACTERS[app.sel_index].music)
         app.music.stop()
 
+    def test_music_seed_stays_stable_without_explicit_seed(self):
+        """A random visual seed must not invalidate the rendered-track cache."""
+        from hollyweeb.app import App
+
+        a1 = make_args(character="neko", music=True)
+        a1.seed, a1.seed_given = 111, False
+        a2 = make_args(character="neko", music=True)
+        a2.seed, a2.seed_given = 999, False
+        self.assertEqual(App(a1).music._cache_path(), App(a2).music._cache_path())
+
+        a3 = make_args(character="neko", music=True)
+        a3.seed, a3.seed_given = 111, True
+        a4 = make_args(character="neko", music=True)
+        a4.seed, a4.seed_given = 999, True
+        self.assertNotEqual(App(a3).music._cache_path(), App(a4).music._cache_path())
+
     def test_headless_shot_is_silent(self):
         from hollyweeb import cli
 

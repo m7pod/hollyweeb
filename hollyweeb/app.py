@@ -107,7 +107,7 @@ class App:
             enabled=bool(getattr(args, "music", False)),
             style=getattr(args, "music_style", None) or CHARACTERS[self.char_index].music,
             volume=getattr(args, "music_volume", 0.7),
-            seed=args.seed or 0,
+            seed=args.seed if getattr(args, "seed_given", False) else 0,
             path=getattr(args, "music_file", None),
             bpm=getattr(args, "music_bpm", None),
             bars=getattr(args, "music_bars", None),

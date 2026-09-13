@@ -210,6 +210,9 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_selftest(args.frames)
     if args.shot:
         return cmd_shot(args)
+    # a random visual seed every run is nice; the soundtrack keeps a stable seed
+    # so its rendered tracks stay cacheable across runs (override with --seed)
+    args.seed_given = args.seed is not None
     if args.seed is None:
         args.seed = random.randrange(1 << 30)
     from .app import run
